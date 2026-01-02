@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bamboo Valley</title>
+<style>
+  body { margin:0; background:#222; color:white; font-family:Arial; text-align:center; }
+  canvas { image-rendering: pixelated; background:black; display:block; margin:10px auto; border:3px solid #000; }
+  #sidebar { position:absolute; top:10px; right:10px; display:flex; flex-direction:column; gap:5px; }
+  .button { padding:5px 10px; cursor:pointer; background:#444; border:1px solid #fff; }
+  #inventoryPanel, #craftingPanel {
+    display:none; position:absolute; top:50px; right:10px;
+    background:#222; padding:10px; border:2px solid #fff;
+  }
+  #crafting { display:grid; grid-template-columns: repeat(3, 40px); gap:2px; }
+  .slot {
+    width:40px; height:40px; border:1px solid #fff;
+    background:#333; display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .item-count {
+    position: absolute;
+    bottom: 0;
+    right: 2px;
+    font-size: 12px;
+    color: white;
+    text-shadow: 1px 1px 1px black;
+  }
+  .health-bar {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 200px;
+    height: 20px;
+    border: 2px solid #fff;
+    background: #333;
+  }
+  .health-fill {
+    height: 100%;
+    background: #f00;
+    width: 100%;
+    transition: width 0.3s;
+  }
+  #outputSlot {
+    margin-top: 10px;
+    padding: 10px;
+    border: 2px dashed #fff;
+    min-height: 40px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Bamboo Valley</h1>
+<p>Move: WASD / Arrows | E: Mine | Q: Place | Space: Attack | ESC: Close UI</p>
+
+<canvas id="game" width="640" height="480"></canvas>
+
+<div class="health-bar">
+  <div class="health-fill" id="healthFill"></div>
+</div>
+
+<div id="sidebar">
+  <button class="button" id="toggleInventory">Inventory</button>
+  <button class="button" id="toggleCrafting">Crafting</button>
+  <button class="button" id="saveButton">Save</button>
+  <button class="button" id="loadButton">Load</button>
+</div>
+
+<div id="inventoryPanel">
+  <div id="inventoryGrid" style="display: grid; grid-template-columns: repeat(5, 40px); gap: 5px;"></div>
+</div>
+
+<div id="craftingPanel">
+  <div id="crafting"></div>
+  <div id="outputSlot"></div>
+  <button class="button" id="craftButton">Craft</button>
+</div>
+
+<script>
+// ========== CORE FIXES ==========
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const TILE = 32;
+const VIEW_W = 20;
+const VIEW_H = 15;
+const CHUNK_SIZE = 16;
+
+// ========== TEXTURE LOADING ==========
+const textures = {};
+const texturePaths = {
+  // Terrain & Ores
+  'grass': 'grass.png',
+  'bamboo': 'bamboo.png',
+  'stone': 'stone.png',
+  'cave_floor': 'cave_floor.png',
+  'air': 'air.png',
+  'dirt': 'dirt.png',
+  'sand': 'sand.png',
+  'water': 'water.png',
+  'wood': 'wood.png',
+  'coal_ore': 'coal_ore.png',
+  'iron_ore': 'iron_ore.png',
+  'gold_ore': 'gold_ore.png',
+  'diamond_ore': 'diamond_ore.png',
+  
+  // Player
+  'panda': 'panda.png',
+  
+  // Enemies
+  'slime': 'slime.png',
+  'snake': 'snake.png',
+  'bat': 'bat.png',
+  
+  // Items & Resources
+  'wood_item': 'wood_item.png',
+  'stick_item': 'stick_item.png',
+  'stone_item': 'stone_item.png',
+  'bamboo_item': 'bamboo_item.png',
+  'coal_item': 'coal_item.png',
+  'iron_ingot': 'iron_ingot.png',
+  'gold_ingot': 'gold_ingot.png',
+  'diamond_gem': 'diamond_gem.png',
+  
+  // Tools - All tiers
+  'wood_pickaxe': 'wood_pickaxe.png',
+  'wood_sword': 'wood_sword.png',
+  'wood_axe': 'wood_axe.png',
+  'wood_shovel': 'wood_shovel.png',
+  
+  'stone_pickaxe': 'stone_pickaxe.png',
+  'stone_sword': 'stone_sword.png',
+  'stone_axe': 'stone_axe.png',
+  'stone_shovel': 'stone_shovel.png',
+  
+  'iron_pickaxe': 'iron_pickaxe.png',
+  'iron_sword': 'iron_sword.png',
+  'iron_axe': 'iron_axe.png',
+  'iron_shovel': 'iron_shovel.png',
+  
+  'gold_pickaxe': 'gold_pickaxe.png',
+  'gold_sword': 'gold_sword.png',
+  'gold_axe': 'gold_axe.png',
+  'gold_shovel': 'gold_shovel.png',
+  
+  'diamond_pickaxe': 'diamond_pickaxe.png',
+  'diamond_sword': 'diamond_sword.png',
+  'diamond_axe': 'diamond_axe.png',
+  'diamond_shovel': 'diamond_shovel.png',
+  
+  // Other
+  'furnace': 'furnace.png',
+  'chest': 'chest.png'
+};
+
+// Fallback colors for missing textures
+const fallbackColors = {
+  // Terrain & Ores
+  'grass': '#4a7',
+  'bamboo': '#8c4',
+  'stone': '#888',
+  'cave_floor': '#654',
+  'air': '#246',
+  'dirt': '#963',
+  'sand': '#db5',
+  'water': '#36c',
+  'wood': '#963',
+  'coal_ore': '#333',
+  'iron_ore': '#aaa',
+  'gold_ore': '#fd0',
+  'diamond_ore': '#6cf',
+  
+  // Player
+  'panda': '#fff',
+  
+  // Enemies
+  'slime': '#0c8',
+  'snake': '#8a4',
+  'bat': '#a8a',
+  
+  // Items & Resources
+  'wood_item': '#963',
+  'stick_item': '#db5',
+  'stone_item': '#aaa',
+  'bamboo_item': '#8c4',
+  'coal_item': '#333',
+  'iron_ingot': '#aaa',
+  'gold_ingot': '#fd0',
+  'diamond_gem': '#6cf',
+  
+  // Wood tools
+  'wood_pickaxe': '#b85',
+  'wood_sword': '#b85',
+  'wood_axe': '#b85',
+  'wood_shovel': '#b85',
+  
+  // Stone tools
+  'stone_pickaxe': '#888',
+  'stone_sword': '#888',
+  'stone_axe': '#888',
+  'stone_shovel': '#888',
+  
+  // Iron tools
+  'iron_pickaxe': '#ccc',
+  'iron_sword': '#ccc',
+  'iron_axe': '#ccc',
+  'iron_shovel': '#ccc',
+  
+  // Gold tools
+  'gold_pickaxe': '#fd0',
+  'gold_sword': '#fd0',
+  'gold_axe': '#fd0',
+  'gold_shovel': '#fd0',
+  
+  // Diamond tools
+  'diamond_pickaxe': '#6cf',
+  'diamond_sword': '#6cf',
+  'diamond_axe': '#6cf',
+  'diamond_shovel': '#6cf',
+  
+  // Other
+  'furnace': '#666',
+  'chest': '#b85'
+};
+
+let assetsLoaded = 0;
+const totalAssets = Object.keys(texturePaths).length;
+
+function createFallbackTexture(color) {
+  const canvas = document.createElement('canvas');
+  canvas.width = TILE;
+  canvas.height = TILE;
+  const ctx = canvas.getContext('2d');
+  
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, TILE, TILE);
+  
+  ctx.fillStyle = 'rgba(0,0,0,0.1)';
+  for(let i = 0; i < 4; i++) {
+    for(let j = 0; j < 4; j++) {
+      if((i + j) % 2 === 0) {
+        ctx.fillRect(i * 8, j * 8, 8, 8);
+      }
+    }
+  }
+  
+  const img = new Image();
+  img.src = canvas.toDataURL();
+  return img;
+}
+
+function loadTexture(name, path) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    
+    img.onload = () => {
+      textures[name] = img;
+      assetsLoaded++;
+      if(assetsLoaded >= totalAssets) {
+        startGame();
+      }
+      resolve(img);
+    };
+    
+    img.onerror = () => {
+      textures[name] = createFallbackTexture(fallbackColors[name] || '#f0f');
+      assetsLoaded++;
+      if(assetsLoaded >= totalAssets) {
+        startGame();
+      }
+      resolve(textures[name]);
+    };
+    
+    img.src = path;
+  });
+}
+
+function loadAllTextures() {
+  const loadPromises = [];
+  
+  for(const [name, path] of Object.entries(texturePaths)) {
+    loadPromises.push(loadTexture(name, path));
+  }
+  
+  return Promise.all(loadPromises);
+}
+
+// ========== STATE MANAGER ==========
+const gameState = {
+  player: { 
+    x: 0, 
+    y: 0, 
+    dirX: 0, 
+    dirY: -1,
+    pixelX: 0,
+    pixelY: 0,
+    moving: false,
+    targetX: 0,
+    targetY: 0,
+    health: 100,
+    maxHealth: 100,
+    direction: 'down',
+    attackCooldown: 0,
+    equippedItem: null
+  },
+  inventory: [
+    { type: 'bamboo_item', count: 10, maxStack: 64 },
+    { type: 'stone_item', count: 5, maxStack: 64 },
+    { type: 'wood_item', count: 4, maxStack: 64 },
+    { type: 'stick_item', count: 8, maxStack: 64 }
+  ],
+  world: {
+    chunks: {},
+    biomes: {},
+    caves: {}
+  },
+  ui: {
+    inventoryOpen: false,
+    craftingOpen: false,
+    selectedSlot: 0
+  },
+  entities: [],
+  time: 0,
+  lastSave: null,
+  dayTime: 12
+};
+
+// ========== ERROR GUARDING ==========
+function safeDrawImage(img, x, y, width = TILE, height = TILE) {
+  if (!img || img.complete === false) {
+    ctx.fillStyle = '#f0f';
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeStyle = '#fff';
+    ctx.strokeRect(x, y, width, height);
+    ctx.fillStyle = '#000';
+    ctx.font = '10px Arial';
+    ctx.fillText('!', x + width/2 - 3, y + height/2 + 3);
+  } else {
+    ctx.drawImage(img, x, y, width, height);
+  }
+}
+
+function getTexture(name) {
+  return textures[name] || createFallbackTexture(fallbackColors[name] || '#f0f');
+}
+
+// ========== WORLD GENERATION WITH ORES ==========
+function generateChunk(cx, cy) {
+  const key = `${cx},${cy}`;
+  if(gameState.world.chunks[key]) return;
+  
+  let chunk = [];
+  const biomeNoise = Math.sin(cx * 0.5) * Math.cos(cy * 0.5);
+  let biome = 'forest';
+  if(biomeNoise > 0.3) biome = 'plains';
+  if(biomeNoise < -0.3) biome = 'desert';
+  
+  for(let y = 0; y < CHUNK_SIZE; y++) {
+    let row = [];
+    for(let x = 0; x < CHUNK_SIZE; x++) {
+      let globalY = cy * CHUNK_SIZE + y;
+      let globalX = cx * CHUNK_SIZE + x;
+      
+      // Generate caves
+      const caveNoise = Math.sin(globalX * 0.15) * Math.cos(globalY * 0.15);
+      const isCave = globalY > 12 && caveNoise > 0.4;
+      
+      if(isCave) {
+        // Add ore veins in caves
+        const oreNoise = Math.sin(globalX * 0.3) * Math.cos(globalY * 0.3);
+        const depth = globalY;
+        
+        if(depth > 30 && oreNoise > 0.9) {
+          row.push('diamond_ore');
+        } else if(depth > 20 && oreNoise > 0.8) {
+          row.push('gold_ore');
+        } else if(depth > 10 && oreNoise > 0.7) {
+          row.push('iron_ore');
+        } else if(depth > 5 && oreNoise > 0.6) {
+          row.push('coal_ore');
+        } else {
+          row.push(caveNoise > 0.6 ? 'air' : 'stone');
+        }
+      } else {
+        let tile = 'grass';
+        
+        if(globalY > 10) {
+          tile = 'stone';
+        } else if(globalY < -5) {
+          tile = 'water';
+        } else {
+          switch(biome) {
+            case 'forest':
+              if(Math.random() < 0.3) tile = 'bamboo';
+              else if(Math.random() < 0.1) tile = 'stone';
+              break;
+            case 'plains':
+              if(Math.random() < 0.05) tile = 'bamboo';
+              else if(Math.random() < 0.2) tile = 'dirt';
+              break;
+            case 'desert':
+              tile = 'sand';
+              if(Math.random() < 0.05) tile = 'stone';
+              break;
+          }
+        }
+        row.push(tile);
+      }
+    }
+    chunk.push(row);
+  }
+  
+  gameState.world.chunks[key] = chunk;
+  gameState.world.biomes[key] = biome;
+  
+  // Generate enemies
+  if(cy >= 0) {
+    for(let i = 0; i < 2; i++) {
+      const x = cx * CHUNK_SIZE + Math.floor(Math.random() * CHUNK_SIZE);
+      const y = cy * CHUNK_SIZE + Math.floor(Math.random() * CHUNK_SIZE);
+      const tile = getTile(x, y);
+      
+      if(tile === 'grass' || tile === 'dirt' || tile === 'sand') {
+        const enemyType = Math.random();
+        if(enemyType < 0.5) {
+          gameState.entities.push({
+            type: 'slime',
+            x: x + 0.5,
+            y: y + 0.5,
+            health: 30,
+            maxHealth: 30,
+            speed: 0.03
+          });
+        } else {
+          gameState.entities.push({
+            type: 'snake',
+            x: x + 0.5,
+            y: y + 0.5,
+            health: 20,
+            maxHealth: 20,
+            speed: 0.04
+          });
+        }
+      }
+    }
+  } else {
+    for(let i = 0; i < 3; i++) {
+      const x = cx * CHUNK_SIZE + Math.floor(Math.random() * CHUNK_SIZE);
+      const y = cy * CHUNK_SIZE + Math.floor(Math.random() * CHUNK_SIZE);
+      if(getTile(x, y) === 'air') {
+        gameState.entities.push({
+          type: 'bat',
+          x: x + 0.5,
+          y: y + 0.5,
+          health: 15,
+          maxHealth: 15,
+          speed: 0.05
+        });
+      }
+    }
+  }
+}
+
+function getTile(x, y) {
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cy = Math.floor(y / CHUNK_SIZE);
+  generateChunk(cx, cy);
+  
+  const chunk = gameState.world.chunks[`${cx},${cy}`];
+  if(!chunk) return 'stone';
+  
+  const localX = x - cx * CHUNK_SIZE;
+  const localY = y - cy * CHUNK_SIZE;
+  
+  if(localY < 0 || localY >= chunk.length || 
+     localX < 0 || localX >= chunk[0].length) {
+    return 'stone';
+  }
+  
+  return chunk[localY][localX];
+}
+
+function setTile(x, y, tile) {
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cy = Math.floor(y / CHUNK_SIZE);
+  const chunk = gameState.world.chunks[`${cx},${cy}`];
+  
+  if(chunk) {
+    const localX = x - cx * CHUNK_SIZE;
+    const localY = y - cy * CHUNK_SIZE;
+    chunk[localY][localX] = tile;
+  }
+}
+
+function isWalkable(x, y) {
+  const t = getTile(x, y);
+  return t === "grass" || t === "cave_floor" || t === "dirt" || t === "sand";
+}
+
+// ========== PLAYER & MOVEMENT ==========
+function movePlayer(dx, dy) {
+  if(gameState.ui.inventoryOpen || gameState.ui.craftingOpen) return;
+  
+  gameState.player.dirX = dx;
+  gameState.player.dirY = dy;
+  
+  const newX = gameState.player.x + dx;
+  const newY = gameState.player.y + dy;
+  
+  if(isWalkable(newX, newY)) {
+    gameState.player.x = newX;
+    gameState.player.y = newY;
+  }
+}
+
+function updatePlayer(deltaTime) {
+  if(gameState.player.attackCooldown > 0) {
+    gameState.player.attackCooldown -= deltaTime;
+  }
+  
+  gameState.dayTime += deltaTime * 0.05;
+  if(gameState.dayTime >= 24) gameState.dayTime = 0;
+  
+  gameState.entities.forEach((entity, index) => {
+    const dx = gameState.player.x - entity.x;
+    const dy = gameState.player.y - entity.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    if(entity.type === 'slime' || entity.type === 'snake') {
+      if(dist < 6 && dist > 1) {
+        entity.x += Math.sign(dx) * entity.speed;
+        entity.y += Math.sign(dy) * entity.speed;
+      }
+    } else if(entity.type === 'bat') {
+      entity.x += (Math.random() - 0.5) * 0.1;
+      entity.y += (Math.random() - 0.5) * 0.1;
+      
+      if(dist < 4 && dist > 0.5) {
+        entity.x += Math.sign(dx) * entity.speed;
+        entity.y += Math.sign(dy) * entity.speed;
+      }
+    }
+    
+    if(dist < 0.8 && gameState.player.attackCooldown <= 0) {
+      let damage = 5;
+      if(entity.type === 'snake') damage = 8;
+      if(entity.type === 'bat') damage = 3;
+      
+      gameState.player.health -= damage;
+      gameState.player.attackCooldown = 1;
+      
+      if(gameState.player.health <= 0) {
+        gameState.player.health = 0;
+        alert("You died! Respawning...");
+        gameState.player.x = 0;
+        gameState.player.y = 0;
+        gameState.player.health = gameState.player.maxHealth;
+      }
+    }
+  });
+}
+
+// ========== COMBAT SYSTEM ==========
+function attack() {
+  if(gameState.player.attackCooldown > 0) return;
+  
+  gameState.player.attackCooldown = 0.5;
+  
+  const attackX = gameState.player.x + gameState.player.dirX;
+  const attackY = gameState.player.y + gameState.player.dirY;
+  
+  for(let i = gameState.entities.length - 1; i >= 0; i--) {
+    const entity = gameState.entities[i];
+    if(Math.abs(entity.x - attackX) < 1.2 && Math.abs(entity.y - attackY) < 1.2) {
+      let damage = 5;
+      const equipped = gameState.player.equippedItem;
+      
+      if(equipped) {
+        if(equipped.includes('wood_sword')) damage = 10;
+        else if(equipped.includes('stone_sword')) damage = 15;
+        else if(equipped.includes('iron_sword')) damage = 20;
+        else if(equipped.includes('gold_sword')) damage = 15; // Gold is weaker but faster
+        else if(equipped.includes('diamond_sword')) damage = 25;
+      }
+      
+      entity.health -= damage;
+      
+      if(entity.health <= 0) {
+        if(entity.type === 'slime') {
+          addToInventory('bamboo_item', Math.floor(Math.random() * 2) + 1);
+        } else if(entity.type === 'snake') {
+          addToInventory('stone_item', Math.floor(Math.random() * 2) + 1);
+        } else if(entity.type === 'bat') {
+          addToInventory('wood_item', 1);
+        }
+        gameState.entities.splice(i, 1);
+      }
+    }
+  }
+}
+
+// ========== MINING SYSTEM WITH TIERED TOOLS ==========
+function mineBlock(x, y) {
+  const tile = getTile(x, y);
+  let minedItem = null;
+  let requiredTool = null;
+  
+  switch(tile) {
+    case 'bamboo':
+      minedItem = 'bamboo_item';
+      break;
+    case 'wood':
+      minedItem = 'wood_item';
+      break;
+    case 'stone':
+      minedItem = 'stone_item';
+      requiredTool = 'pickaxe';
+      break;
+    case 'coal_ore':
+      minedItem = 'coal_item';
+      requiredTool = 'pickaxe';
+      break;
+    case 'iron_ore':
+      minedItem = 'iron_ingot';
+      requiredTool = 'stone_pickaxe'; // Requires at least stone pickaxe
+      break;
+    case 'gold_ore':
+      minedItem = 'gold_ingot';
+      requiredTool = 'iron_pickaxe'; // Requires at least iron pickaxe
+      break;
+    case 'diamond_ore':
+      minedItem = 'diamond_gem';
+      requiredTool = 'iron_pickaxe'; // Requires at least iron pickaxe
+      break;
+  }
+  
+  if(minedItem) {
+    if(requiredTool) {
+      const equipped = gameState.player.equippedItem;
+      if(!equipped || !equipped.includes('pickaxe')) {
+        alert(`You need a ${requiredTool.replace('_pickaxe', '')} pickaxe or better to mine this!`);
+        return false;
+      }
+      
+      // Check tool tier requirements
+      if(requiredTool === 'stone_pickaxe') {
+        if(equipped.includes('wood_pickaxe')) {
+          alert("You need at least a stone pickaxe to mine iron ore!");
+          return false;
+        }
+      } else if(requiredTool === 'iron_pickaxe') {
+        if(equipped.includes('wood_pickaxe') || equipped.includes('stone_pickaxe')) {
+          alert("You need at least an iron pickaxe to mine gold and diamond ore!");
+          return false;
+        }
+      }
+    }
+    
+    addToInventory(minedItem, 1);
+    setTile(x, y, 'cave_floor');
+    return true;
+  }
+  return false;
+}
+
+// ========== INVENTORY SYSTEM ==========
+function updateInventoryDisplay() {
+  const grid = document.getElementById('inventoryGrid');
+  grid.innerHTML = '';
+  
+  gameState.inventory.forEach((item, index) => {
+    const slot = document.createElement('div');
+    slot.className = 'slot';
+    slot.style.position = 'relative';
+    
+    const itemImg = new Image();
+    itemImg.src = getTexture(item.type).src;
+    itemImg.style.width = '32px';
+    itemImg.style.height = '32px';
+    itemImg.style.imageRendering = 'pixelated';
+    slot.appendChild(itemImg);
+    
+    if(index === gameState.ui.selectedSlot) {
+      slot.style.borderColor = '#ff0';
+      slot.style.boxShadow = '0 0 10px #ff0';
+      gameState.player.equippedItem = item.type;
+    }
+    
+    slot.onclick = () => {
+      gameState.ui.selectedSlot = index;
+      updateInventoryDisplay();
+    };
+    
+    const count = document.createElement('div');
+    count.className = 'item-count';
+    count.textContent = item.count > 1 ? item.count : '';
+    slot.appendChild(count);
+    
+    grid.appendChild(slot);
+  });
+}
+
+function addToInventory(type, amount = 1) {
+  const existing = gameState.inventory.find(item => item.type === type && item.count < item.maxStack);
+  
+  if(existing) {
+    existing.count += amount;
+  } else {
+    gameState.inventory.push({ 
+      type: type, 
+      count: amount, 
+      maxStack: 64
+    });
+  }
+  updateInventoryDisplay();
+}
+
+// ========== CRAFTING SYSTEM WITH TIERED TOOLS ==========
+const recipes = [
+  // Sticks (4 sticks from 2 wood)
+  {
+    name: 'Sticks',
+    input: [
+      ['', 'wood_item', ''],
+      ['', 'wood_item', ''],
+      ['', '', '']
+    ],
+    output: { type: 'stick_item', count: 4 }
+  },
+  
+  // Wood Pickaxe
+  {
+    name: 'Wood Pickaxe',
+    input: [
+      ['wood_item', 'wood_item', 'wood_item'],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'wood_pickaxe', count: 1 }
+  },
+  
+  // Stone Pickaxe
+  {
+    name: 'Stone Pickaxe',
+    input: [
+      ['stone_item', 'stone_item', 'stone_item'],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'stone_pickaxe', count: 1 }
+  },
+  
+  // Iron Pickaxe
+  {
+    name: 'Iron Pickaxe',
+    input: [
+      ['iron_ingot', 'iron_ingot', 'iron_ingot'],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'iron_pickaxe', count: 1 }
+  },
+  
+  // Gold Pickaxe
+  {
+    name: 'Gold Pickaxe',
+    input: [
+      ['gold_ingot', 'gold_ingot', 'gold_ingot'],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'gold_pickaxe', count: 1 }
+  },
+  
+  // Diamond Pickaxe
+  {
+    name: 'Diamond Pickaxe',
+    input: [
+      ['diamond_gem', 'diamond_gem', 'diamond_gem'],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'diamond_pickaxe', count: 1 }
+  },
+  
+  // Wood Sword
+  {
+    name: 'Wood Sword',
+    input: [
+      ['', 'wood_item', ''],
+      ['', 'wood_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'wood_sword', count: 1 }
+  },
+  
+  // Stone Sword
+  {
+    name: 'Stone Sword',
+    input: [
+      ['', 'stone_item', ''],
+      ['', 'stone_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'stone_sword', count: 1 }
+  },
+  
+  // Iron Sword
+  {
+    name: 'Iron Sword',
+    input: [
+      ['', 'iron_ingot', ''],
+      ['', 'iron_ingot', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'iron_sword', count: 1 }
+  },
+  
+  // Gold Sword
+  {
+    name: 'Gold Sword',
+    input: [
+      ['', 'gold_ingot', ''],
+      ['', 'gold_ingot', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'gold_sword', count: 1 }
+  },
+  
+  // Diamond Sword
+  {
+    name: 'Diamond Sword',
+    input: [
+      ['', 'diamond_gem', ''],
+      ['', 'diamond_gem', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'diamond_sword', count: 1 }
+  },
+  
+  // Wood Axe
+  {
+    name: 'Wood Axe',
+    input: [
+      ['wood_item', 'wood_item', ''],
+      ['wood_item', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'wood_axe', count: 1 }
+  },
+  
+  // Stone Axe
+  {
+    name: 'Stone Axe',
+    input: [
+      ['stone_item', 'stone_item', ''],
+      ['stone_item', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'stone_axe', count: 1 }
+  },
+  
+  // Iron Axe
+  {
+    name: 'Iron Axe',
+    input: [
+      ['iron_ingot', 'iron_ingot', ''],
+      ['iron_ingot', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'iron_axe', count: 1 }
+  },
+  
+  // Gold Axe
+  {
+    name: 'Gold Axe',
+    input: [
+      ['gold_ingot', 'gold_ingot', ''],
+      ['gold_ingot', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'gold_axe', count: 1 }
+  },
+  
+  // Diamond Axe
+  {
+    name: 'Diamond Axe',
+    input: [
+      ['diamond_gem', 'diamond_gem', ''],
+      ['diamond_gem', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'diamond_axe', count: 1 }
+  },
+  
+  // Wood Shovel
+  {
+    name: 'Wood Shovel',
+    input: [
+      ['', 'wood_item', ''],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'wood_shovel', count: 1 }
+  },
+  
+  // Stone Shovel
+  {
+    name: 'Stone Shovel',
+    input: [
+      ['', 'stone_item', ''],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'stone_shovel', count: 1 }
+  },
+  
+  // Iron Shovel
+  {
+    name: 'Iron Shovel',
+    input: [
+      ['', 'iron_ingot', ''],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'iron_shovel', count: 1 }
+  },
+  
+  // Gold Shovel
+  {
+    name: 'Gold Shovel',
+    input: [
+      ['', 'gold_ingot', ''],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'gold_shovel', count: 1 }
+  },
+  
+  // Diamond Shovel
+  {
+    name: 'Diamond Shovel',
+    input: [
+      ['', 'diamond_gem', ''],
+      ['', 'stick_item', ''],
+      ['', 'stick_item', '']
+    ],
+    output: { type: 'diamond_shovel', count: 1 }
+  },
+  
+  // Furnace
+  {
+    name: 'Furnace',
+    input: [
+      ['stone_item', 'stone_item', 'stone_item'],
+      ['stone_item', '', 'stone_item'],
+      ['stone_item', 'stone_item', 'stone_item']
+    ],
+    output: { type: 'furnace', count: 1 }
+  },
+  
+  // Chest
+  {
+    name: 'Chest',
+    input: [
+      ['wood_item', 'wood_item', 'wood_item'],
+      ['wood_item', '', 'wood_item'],
+      ['wood_item', 'wood_item', 'wood_item']
+    ],
+    output: { type: 'chest', count: 1 }
+  }
+];
+
+let craftingGrid = Array(3).fill().map(() => Array(3).fill(""));
+
+function drawCrafting() {
+  const craftingDiv = document.getElementById("crafting");
+  craftingDiv.innerHTML = "";
+  
+  for(let y = 0; y < 3; y++) {
+    for(let x = 0; x < 3; x++) {
+      const slot = document.createElement("div");
+      slot.className = "slot";
+      
+      if(craftingGrid[y][x]) {
+        const itemImg = new Image();
+        itemImg.src = getTexture(craftingGrid[y][x]).src;
+        itemImg.style.width = '32px';
+        itemImg.style.height = '32px';
+        itemImg.style.imageRendering = 'pixelated';
+        slot.appendChild(itemImg);
+      }
+      
+      slot.onclick = () => {
+        const selectedItem = gameState.inventory[gameState.ui.selectedSlot];
+        if(selectedItem) {
+          craftingGrid[y][x] = craftingGrid[y][x] ? "" : selectedItem.type;
+          updateCraftingPreview();
+          drawCrafting();
+        }
+      };
+      craftingDiv.appendChild(slot);
+    }
+  }
+}
+
+function updateCraftingPreview() {
+  const outputSlot = document.getElementById("outputSlot");
+  outputSlot.innerHTML = "";
+  
+  for(const recipe of recipes) {
+    let match = true;
+    for(let y = 0; y < 3; y++) {
+      for(let x = 0; x < 3; x++) {
+        if(recipe.input[y][x] !== craftingGrid[y][x]) {
+          match = false;
+          break;
+        }
+      }
+      if(!match) break;
+    }
+    
+    if(match) {
+      const outputImg = new Image();
+      outputImg.src = getTexture(recipe.output.type).src;
+      outputImg.style.width = '32px';
+      outputImg.style.height = '32px';
+      outputImg.style.imageRendering = 'pixelated';
+      outputImg.style.verticalAlign = 'middle';
+      
+      outputSlot.innerHTML = `${recipe.name} (x${recipe.output.count}) `;
+      outputSlot.appendChild(outputImg);
+      return;
+    }
+  }
+  
+  outputSlot.textContent = "No valid recipe";
+}
+
+function craft() {
+  for(const recipe of recipes) {
+    let match = true;
+    for(let y = 0; y < 3; y++) {
+      for(let x = 0; x < 3; x++) {
+        if(recipe.input[y][x] !== craftingGrid[y][x]) {
+          match = false;
+          break;
+        }
+      }
+      if(!match) break;
+    }
+    
+    if(match) {
+      const itemsNeeded = {};
+      recipe.input.forEach(row => {
+        row.forEach(item => {
+          if(item) {
+            itemsNeeded[item] = (itemsNeeded[item] || 0) + 1;
+          }
+        });
+      });
+      
+      let canCraft = true;
+      for(const [item, count] of Object.entries(itemsNeeded)) {
+        const inventoryItem = gameState.inventory.find(i => i.type === item);
+        if(!inventoryItem || inventoryItem.count < count) {
+          alert(`Not enough ${item}`);
+          canCraft = false;
+          break;
+        }
+      }
+      
+      if(!canCraft) return;
+      
+      for(const [item, count] of Object.entries(itemsNeeded)) {
+        const inventoryItem = gameState.inventory.find(i => i.type === item);
+        inventoryItem.count -= count;
+        if(inventoryItem.count <= 0) {
+          const index = gameState.inventory.indexOf(inventoryItem);
+          gameState.inventory.splice(index, 1);
+          if(index <= gameState.ui.selectedSlot && gameState.ui.selectedSlot > 0) {
+            gameState.ui.selectedSlot--;
+          }
+        }
+      }
+      
+      addToInventory(recipe.output.type, recipe.output.count);
+      
+      craftingGrid = Array(3).fill().map(() => Array(3).fill(""));
+      updateCraftingPreview();
+      drawCrafting();
+      updateInventoryDisplay();
+      return;
+    }
+  }
+  
+  alert("Invalid recipe");
+}
+
+// ========== SAVE SYSTEM ==========
+function saveGame() {
+  const saveData = {
+    player: {
+      x: gameState.player.x,
+      y: gameState.player.y,
+      health: gameState.player.health,
+      inventory: gameState.inventory,
+      equippedItem: gameState.player.equippedItem
+    },
+    world: gameState.world,
+    entities: gameState.entities,
+    time: Date.now()
+  };
+  
+  localStorage.setItem('bambooValleySave', JSON.stringify(saveData));
+  gameState.lastSave = Date.now();
+  alert("Game saved!");
+}
+
+function loadGame() {
+  const saveData = localStorage.getItem('bambooValleySave');
+  if(!saveData) {
+    alert("No saved game found");
+    return;
+  }
+  
+  try {
+    const loaded = JSON.parse(saveData);
+    Object.assign(gameState.player, loaded.player);
+    Object.assign(gameState.world, loaded.world);
+    gameState.inventory = loaded.player.inventory;
+    gameState.entities = loaded.entities || [];
+    
+    updateInventoryDisplay();
+    alert("Game loaded!");
+  } catch(e) {
+    alert("Error loading save: " + e.message);
+  }
+}
+
+// ========== DRAWING ==========
+function draw() {
+  const hour = gameState.dayTime;
+  let skyColor = '#87CEEB';
+  if(hour > 18 || hour < 6) skyColor = '#191970';
+  else if(hour > 17 || hour < 7) skyColor = '#FFA500';
+  
+  ctx.fillStyle = skyColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  
+  for(let y = 0; y < VIEW_H; y++) {
+    for(let x = 0; x < VIEW_W; x++) {
+      const worldX = gameState.player.x + x - Math.floor(VIEW_W / 2);
+      const worldY = gameState.player.y + y - Math.floor(VIEW_H / 2);
+      
+      const tile = getTile(worldX, worldY);
+      const screenX = x * TILE;
+      const screenY = y * TILE;
+      
+      safeDrawImage(getTexture(tile), screenX, screenY);
+      
+      if(tile === 'air' || tile === 'cave_floor') {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(screenX, screenY, TILE, TILE);
+      } else if(hour > 18 || hour < 6) {
+        ctx.fillStyle = 'rgba(0, 0, 50, 0.5)';
+        ctx.fillRect(screenX, screenY, TILE, TILE);
+      }
+    }
+  }
+  
+  gameState.entities.forEach(entity => {
+    const screenX = (entity.x - gameState.player.x + VIEW_W/2) * TILE - TILE/2;
+    const screenY = (entity.y - gameState.player.y + VIEW_H/2) * TILE - TILE/2;
+    
+    if(screenX >= -TILE && screenX < canvas.width + TILE &&
+       screenY >= -TILE && screenY < canvas.height + TILE) {
+      safeDrawImage(getTexture(entity.type), screenX, screenY);
+      
+      if(entity.health < entity.maxHealth) {
+        const healthWidth = 30;
+        const healthPercent = entity.health / entity.maxHealth;
+        ctx.fillStyle = '#300';
+        ctx.fillRect(screenX + 1, screenY - 5, healthWidth, 3);
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(screenX + 1, screenY - 5, healthWidth * healthPercent, 3);
+      }
+    }
+  });
+  
+  const playerTexture = getTexture('panda');
+  safeDrawImage(playerTexture, centerX - TILE/2, centerY - TILE/2);
+  
+  if(gameState.player.attackCooldown > 0.3) {
+    ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+    const attackX = centerX + gameState.player.dirX * TILE;
+    const attackY = centerY + gameState.player.dirY * TILE;
+    ctx.fillRect(attackX, attackY, TILE, TILE);
+  }
+  
+  document.getElementById('healthFill').style.width = 
+    `${(gameState.player.health / gameState.player.maxHealth) * 100}%`;
+  
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px Arial';
+  const timeStr = `${Math.floor(gameState.dayTime)}:${Math.floor((gameState.dayTime % 1) * 60).toString().padStart(2, '0')}`;
+  ctx.fillText(`Time: ${timeStr}`, 10, canvas.height - 10);
+  
+  // Show equipped tool
+  if(gameState.player.equippedItem) {
+    ctx.fillText(`Tool: ${gameState.player.equippedItem}`, canvas.width - 150, canvas.height - 10);
+  }
+}
+
+// ========== GAME LOOP ==========
+let lastTime = 0;
+function gameLoop(currentTime) {
+  const deltaTime = (currentTime - lastTime) / 1000;
+  lastTime = currentTime;
+  
+  updatePlayer(deltaTime);
+  draw();
+  
+  requestAnimationFrame(gameLoop);
+}
+
+// ========== INPUT HANDLING ==========
+const keys = {};
+
+document.addEventListener('keydown', (e) => {
+  keys[e.key.toLowerCase()] = true;
+  
+  if(gameState.ui.inventoryOpen || gameState.ui.craftingOpen) {
+    if(e.key === 'Escape') {
+      gameState.ui.inventoryOpen = false;
+      gameState.ui.craftingOpen = false;
+      document.getElementById('inventoryPanel').style.display = 'none';
+      document.getElementById('craftingPanel').style.display = 'none';
+    }
+    return;
+  }
+  
+  if(e.key === 'w' || e.key === 'ArrowUp') movePlayer(0, -1);
+  if(e.key === 's' || e.key === 'ArrowDown') movePlayer(0, 1);
+  if(e.key === 'a' || e.key === 'ArrowLeft') movePlayer(-1, 0);
+  if(e.key === 'd' || e.key === 'ArrowRight') movePlayer(1, 0);
+  
+  if(e.key === 'e') {
+    const targetX = gameState.player.x + gameState.player.dirX;
+    const targetY = gameState.player.y + gameState.player.dirY;
+    mineBlock(targetX, targetY);
+  }
+  
+if(e.key === 'q') {
+  const selectedItem = gameState.inventory[gameState.ui.selectedSlot];
+  if(selectedItem && selectedItem.count > 0) {
+    const targetTile = getTile(
+      gameState.player.x + gameState.player.dirX,
+      gameState.player.y + gameState.player.dirY
+    );
+    
+    if(targetTile === 'grass' || targetTile === 'dirt') {
+      let placeTile = '';
+      if(selectedItem.type === 'bamboo_item') {
+        placeTile = 'bamboo';
+      } else if(selectedItem.type === 'wood_item') {
+        placeTile = 'wood';
+      } else if(selectedItem.type === 'stone_item') {
+        placeTile = 'stone';
+      }
+      
+      if(placeTile) {
+        setTile(gameState.player.x + gameState.player.dirX,
+               gameState.player.y + gameState.player.dirY, placeTile);
+        selectedItem.count--;
+        if(selectedItem.count <= 0) {
+          gameState.inventory.splice(gameState.ui.selectedSlot, 1);
+          if(gameState.inventory.length > 0) {
+            gameState.ui.selectedSlot = Math.min(gameState.ui.selectedSlot, gameState.inventory.length - 1);
+          }
+        }
+        updateInventoryDisplay();
+      }
+    }
+  }
+}
+  
+  if(e.key === ' ') {
+    attack();
+  }
+  
+  if(e.key === 'Escape') {
+    gameState.ui.inventoryOpen = false;
+    gameState.ui.craftingOpen = false;
+    document.getElementById('inventoryPanel').style.display = 'none';
+    document.getElementById('craftingPanel').style.display = 'none';
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  keys[e.key.toLowerCase()] = false;
+});
+
+// ========== UI CONTROLS ==========
+document.getElementById('toggleInventory').onclick = () => {
+  gameState.ui.inventoryOpen = !gameState.ui.inventoryOpen;
+  const panel = document.getElementById('inventoryPanel');
+  panel.style.display = gameState.ui.inventoryOpen ? 'block' : 'none';
+  if(gameState.ui.inventoryOpen) {
+    updateInventoryDisplay();
+  }
+};
+
+document.getElementById('toggleCrafting').onclick = () => {
+  gameState.ui.craftingOpen = !gameState.ui.craftingOpen;
+  const panel = document.getElementById('craftingPanel');
+  panel.style.display = gameState.ui.craftingOpen ? 'block' : 'none';
+  if(gameState.ui.craftingOpen) {
+    drawCrafting();
+    updateCraftingPreview();
+  }
+};
+
+document.getElementById('craftButton').onclick = craft;
+document.getElementById('saveButton').onclick = saveGame;
+document.getElementById('loadButton').onclick = loadGame;
+
+// ========== INITIALIZATION ==========
+function startGame() {
+  generateChunk(0, 0);
+  generateChunk(-1, 0);
+  generateChunk(0, -1);
+  generateChunk(-1, -1);
+  
+  for(let i = 0; i < 3; i++) {
+    gameState.entities.push({
+      type: 'slime',
+      x: Math.floor(Math.random() * 20) - 10,
+      y: Math.floor(Math.random() * 20) - 10,
+      health: 30,
+      maxHealth: 30,
+      speed: 0.03
+    });
+  }
+  
+  updateInventoryDisplay();
+  gameLoop(0);
+}
+
+loadAllTextures();
+</script>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Panda Miner</title>
+  <style>
+    body {
+      background: #222;
+      color: white;
+      font-family: Arial;
+      text-align: center;
+    }
+
+    canvas {
+      border: 2px solid white;
+      background: #87ceeb;
+    }
+
+    button {
+      margin: 5px;
+      padding: 10px;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>🐼 Panda Miner</h1>
+<h6>Touch blocks to mine them • Sell ores • Upgrade tools</h6>
+
+<canvas id="game" width="500" height="500"></canvas>
+
+<p id="stats"></p>
+
+<button onclick="sell()">Sell Ores</button>
+<button onclick="upgrade()">Upgrade Tool</button>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const WORLD_WIDTH = 50;
+const WORLD_HEIGHT = 200;
+const VIEW_SIZE = 50;
+const TILE = 10;
+
+let cameraY = 0;
+
+let player = {
+  x: 25,
+  y: 0,
+  mining: false,
+  mineTimer: 0,
+  targetBlock: null
+};
+
+let money = 0;
+
+let inventory = {
+  copper: 0,
+  gold: 0,
+  diamond: 0
+};
+
+let toolLevel = 1; // 1 = basic, higher = faster
+
+const world = [];
+
+// 🌍 Generate world
+for (let y = 0; y < WORLD_HEIGHT; y++) {
+  world[y] = [];
+  for (let x = 0; x < WORLD_WIDTH; x++) {
+    if (y < 3) world[y][x] = "air";
+    else if (y < 60 && Math.random() < 0.12) world[y][x] = "copper";
+    else if (y < 130 && Math.random() < 0.08) world[y][x] = "gold";
+    else if (y >= 130 && Math.random() < 0.05) world[y][x] = "diamond";
+    else world[y][x] = "dirt";
+  }
+}
+
+// 🎮 Movement
+let keys = {};
+document.addEventListener("keydown", e => keys[e.key] = true);
+document.addEventListener("keyup", e => keys[e.key] = false);
+
+function startMining(targetBlock) {
+  if (player.mining) return;
+  if (!targetBlock) return;
+
+  player.mining = true;
+  player.targetBlock = targetBlock;
+
+  // Mining speed = 30 - 5*toolLevel frames (higher tool = faster)
+  player.mineTimer = Math.max(5, 30 - toolLevel * 5);
+}
+
+function breakBlock(x, y) {
+  const block = world[y][x];
+  if (!block || block === "air") return;
+
+  if (block === "copper") inventory.copper++;
+  if (block === "gold") inventory.gold++;
+  if (block === "diamond") inventory.diamond++;
+
+  world[y][x] = "air";
+}
+
+function update() {
+  // ⬅️➡️ movement
+  let dx = 0;
+  if (keys["ArrowLeft"]) dx = -1;
+  if (keys["ArrowRight"]) dx = 1;
+
+  // Move horizontally if possible
+  const nx = player.x + dx;
+  if (nx >= 0 && nx < WORLD_WIDTH && world[player.y][nx] === "air") {
+    player.x = nx;
+  } else if (nx >=0 && nx < WORLD_WIDTH && world[player.y][nx] !== "air") {
+    startMining({x: nx, y: player.y});
+  }
+
+  // Gravity: fall if air below
+  if (player.y < WORLD_HEIGHT -1 && world[player.y+1][player.x] === "air") {
+    player.y++;
+  } else if (player.y < WORLD_HEIGHT -1 && world[player.y+1][player.x] !== "air") {
+    // Mine block below if down key pressed
+    if (keys["ArrowDown"]) startMining({x: player.x, y: player.y+1});
+  }
+
+  // Mine target block
+  if (player.mining) {
+    player.mineTimer--;
+    if (player.mineTimer <=0) {
+      breakBlock(player.targetBlock.x, player.targetBlock.y);
+      player.mining = false;
+      player.targetBlock = null;
+    }
+  }
+
+  // Camera follows player
+  cameraY = Math.min(Math.max(player.y - 20, 0), WORLD_HEIGHT - VIEW_SIZE);
+}
+
+// 🎨 Draw
+function draw() {
+  ctx.clearRect(0, 0, 500, 500);
+
+  for (let y=0; y<VIEW_SIZE; y++){
+    for (let x=0; x<VIEW_SIZE; x++){
+      const wy = y + cameraY;
+      const block = world[wy]?.[x];
+      if (!block || block === "air") continue;
+
+      if (block==="dirt") ctx.fillStyle="#8b4513";
+      if (block==="copper") ctx.fillStyle="#b87333";
+      if (block==="gold") ctx.fillStyle="#ffd700";
+      if (block==="diamond") ctx.fillStyle="#00ffff";
+
+      ctx.fillRect(x*TILE, y*TILE, TILE, TILE);
+    }
+  }
+
+  // Panda
+// Panda body
+ctx.fillStyle = "white";
+ctx.fillRect(player.x*TILE, (player.y-cameraY)*TILE, TILE, TILE);
+
+// Panda ears (black circles)
+ctx.fillStyle = "black";
+ctx.beginPath();
+ctx.arc(player.x*TILE + 2, (player.y-cameraY)*TILE + 2, 2, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(player.x*TILE + TILE - 2, (player.y-cameraY)*TILE + 2, 2, 0, Math.PI * 2);
+ctx.fill();
+
+// Panda eyes (black circles)
+ctx.beginPath();
+ctx.arc(player.x*TILE + 4, (player.y-cameraY)*TILE + 5, 1.5, 0, Math.PI * 2);
+ctx.fill();
+ctx.beginPath();
+ctx.arc(player.x*TILE + 6, (player.y-cameraY)*TILE + 5, 1.5, 0, Math.PI * 2);
+ctx.fill();
+
+// Panda nose (small black rectangle)
+ctx.fillRect(player.x*TILE + 4.5, (player.y-cameraY)*TILE + 7, 1, 1);
+
+
+  document.getElementById("stats").innerText =
+    `💰 $${money} | ⛏️ Tool ${toolLevel} | 🟠${inventory.copper} 🟡${inventory.gold} 🔷${inventory.diamond}`;
+}
+
+setInterval(() => { update(); draw(); }, 1000/30);
+
+// 🏪 Shop functions
+function sell() {
+  money += inventory.copper*2 + inventory.gold*5 + inventory.diamond*10;
+  inventory.copper = 0;
+  inventory.gold = 0;
+  inventory.diamond = 0;
+}
+
+function upgrade() {
+  const cost = toolLevel*25;
+  if (money >= cost) {
+    money -= cost;
+    toolLevel++;
+  }
+}
+</script>
+
+
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Panda SIM 4</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #f0f8ff;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #gameText {
+      font-size: 20px;
+      margin-top: 20px;
+      min-height: 60px;
+    }
+
+    img {
+      margin-top: 15px;
+      width: 300px;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .pop {
+      animation: pop 0.4s ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Panda SIM 4</h1>
+
+  <div id="gameText"></div>
+
+  <img id="gameImage" src="" alt="Game Image">
+
+  <br>
+  <button onclick="choose('left')">⬅ Left</button>
+  <button onclick="choose('right')">➡ Right</button>
+
+  <script>
+    let currentScene = "zoo";
+
+    const scenes = {
+      zoo: {
+        text: "You are a panda trapped in the zoo. Which way do you go?",
+        img: "zoo.jpg",
+        left: "vent",
+        right: "cages"
+      },
+
+      vent: {
+        text: "You crawl into a vent.",
+        img: "vent.jpg",
+        left: "kitchen",
+        right: "security"
+      },
+
+      cages: {
+        text: "You walk past animal cages.",
+        img: "cages.jpg",
+        left: "security",
+        right: "vent"
+      },
+
+      kitchen: {
+        text: "You sneak into the kitchen.",
+        img: "kitchen.jpg",
+        left: "exit",
+        right: "storage"
+      },
+
+      security: {
+        text: "Security guards are nearby! You hide.",
+        img: "security.jpg",
+        left: "kitchen",
+        right: "exit"
+      },
+
+      storage: {
+        text: "You find food and rest for a moment.",
+        img: "storage.jpg",
+        left: "exit",
+        right: "kitchen"
+      },
+
+      exit: {
+        text: "You found the zoo exit and escaped!",
+        img: "exit.jpg",
+        left: "airport",
+        right: "city"
+      },
+
+      city: {
+        text: "You wander through the city.",
+        img: "city.jpg",
+        left: "airport",
+        right: "shop"
+      },
+
+      shop: {
+        text: "A gift shop blocks your path.",
+        img: "shop.jpg",
+        left: "airport",
+        right: "city"
+      },
+
+      airport: {
+        text: "You reach the airport and board a plane to China!",
+        img: "airport.jpg",
+        left: "china",
+        right: "china"
+      },
+
+      china: {
+        text: "You arrive at the panda sanctuary and find your family 🐼❤️ THE END",
+        img: "family.jpg",
+        left: "china",
+        right: "china"
+      }
+    };
+
+    function showScene() {
+      const textBox = document.getElementById("gameText");
+      const image = document.getElementById("gameImage");
+
+      textBox.classList.remove("pop");
+      image.classList.remove("pop");
+      void textBox.offsetWidth;
+      void image.offsetWidth;
+
+      textBox.textContent = scenes[currentScene].text;
+      image.src = scenes[currentScene].img;
+
+      textBox.classList.add("pop");
+      image.classList.add("pop");
+    }
+
+    function choose(direction) {
+      const nextScene = scenes[currentScene][direction];
+      currentScene = nextScene;
+      showScene();
+    }
+
+    showScene();
+  </script>
+
+</body>
+</html>

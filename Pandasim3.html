@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Panda SIM 3</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background-color: #e6fff2;
+    }
+
+    h1 {
+      margin-top: 20px;
+    }
+
+    #gameText {
+      font-size: 20px;
+      margin-top: 20px;
+      min-height: 80px;
+    }
+
+    img {
+      margin-top: 15px;
+      width: 300px;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    .pop {
+      animation: pop 0.4s ease;
+    }
+
+    @keyframes pop {
+      0% { transform: scale(0.8); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Panda SIM 3</h1>
+
+  <div id="gameText"></div>
+
+  <img id="gameImage" src="" alt="Game Image">
+
+  <br>
+  <button onclick="choose('left')">⬅ Left</button>
+  <button onclick="choose('right')">➡ Right</button>
+  <button onclick="choose('run')">🏃 RUN</button>
+
+  <script>
+    let currentScene = "forest";
+
+    const scenes = {
+      forest: {
+        text: "You wake up in a peaceful forest with your family.",
+        img: "forest.jpg",
+        left: "calm",
+        right: "calm"
+      },
+
+      calm: {
+        text: "It's calm… but suddenly a zoo keeper captures your friend!",
+        img: "capture.jpg",
+        left: "sanctuary",
+        right: "sanctuary"
+      },
+
+      sanctuary: {
+        text: "You rush toward the panda sanctuary.",
+        img: "sanctuary.jpg",
+        left: "tokyo",
+        right: "tokyo"
+      },
+
+      tokyo: {
+        text: "You arrive in Tokyo.",
+        img: "tokyo.jpg",
+        left: "shop",
+        right: "shop"
+      },
+
+      shop: {
+        text: "You stop at a shop.",
+        img: "shop.jpg",
+        left: "library",
+        right: "library"
+      },
+
+      library: {
+        text: "You hide in a quiet library.",
+        img: "library.jpg",
+        left: "airport",
+        right: "airport"
+      },
+
+      airport: {
+        text: "You reach the airport.",
+        img: "airport.jpg",
+        left: "giftshop",
+        right: "giftshop"
+      },
+
+      giftshop: {
+        text: "You are in an airport gift shop.",
+        img: "giftshop.jpg",
+        left: "tickets",
+        right: "tickets"
+      },
+
+      tickets: {
+        text: "You buy a ticket and board the plane.",
+        img: "plane.jpg",
+        left: "america",
+        right: "america"
+      },
+
+      america: {
+        text: "Flying… You arrive in America!",
+        img: "america.jpg",
+        left: "downtown",
+        right: "downtown"
+      },
+
+      downtown: {
+        text: "You explore downtown.",
+        img: "downtown.jpg",
+        left: "petshop",
+        right: "petshop"
+      },
+
+      petshop: {
+        text: "You pass a pet shop.",
+        img: "petshop.jpg",
+        left: "bank",
+        right: "bank"
+      },
+
+      bank: {
+        text: "You walk past a bank.",
+        img: "bank.jpg",
+        left: "town",
+        right: "town"
+      },
+
+      town: {
+        text: "You reach the town near the zoo.",
+        img: "town.jpg",
+        left: "zoo",
+        right: "zoo"
+      },
+
+      zoo: {
+        text: "You made it to the ZOO!!!",
+        img: "zoo.jpg",
+        left: "pettingzoo",
+        right: "pettingzoo"
+      },
+
+      pettingzoo: {
+        text: "You sneak through the petting zoo.",
+        img: "pettingzoo.jpg",
+        left: "gorilla",
+        right: "gorilla"
+      },
+
+      gorilla: {
+        text: "You reach the gorilla cage. A zoo keeper spots you!",
+        img: "gorilla.jpg",
+        run: "escape"
+      },
+
+      escape: {
+        text: "You run! But another zoo keeper catches you and locks you in a cage… THE END",
+        img: "cage.jpg",
+        left: "escape",
+        right: "escape"
+      }
+    };
+
+    function showScene() {
+      const textBox = document.getElementById("gameText");
+      const image = document.getElementById("gameImage");
+
+      textBox.classList.remove("pop");
+      image.classList.remove("pop");
+      void textBox.offsetWidth;
+      void image.offsetWidth;
+
+      textBox.textContent = scenes[currentScene].text;
+      image.src = scenes[currentScene].img;
+
+      textBox.classList.add("pop");
+      image.classList.add("pop");
+    }
+
+    function choose(direction) {
+      const next = scenes[currentScene][direction];
+      if (next) {
+        currentScene = next;
+        showScene();
+      }
+    }
+
+    showScene();
+  </script>
+
+</body>
+</html>

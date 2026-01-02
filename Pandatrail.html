@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PandaTrail - Extended</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #eef8ff;
+      text-align: center;
+    }
+
+    #stats {
+      font-weight: bold;
+      margin: 10px;
+    }
+
+    #gameText {
+      font-size: 18px;
+      margin: 20px;
+      min-height: 120px;
+    }
+
+    #eventImage {
+      max-width: 450px;
+      height: auto;
+      margin: 15px;
+      border-radius: 10px;
+      border: 2px solid #444;
+    }
+
+    #buttons button {
+      padding: 10px 20px;
+      margin: 5px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #progressContainer {
+      width: 85%;
+      background-color: #ccc;
+      margin: 15px auto;
+      height: 28px;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    #progressBar {
+      height: 100%;
+      width: 0%;
+      background-color: #4caf50;
+      transition: width 0.5s;
+    }
+  </style>
+</head>
+<body>
+
+<h1>PandaTrail</h1>
+
+<div id="stats"></div>
+
+<div id="progressContainer">
+  <div id="progressBar"></div>
+</div>
+
+<img id="eventImage" src="" alt="Event Image">
+
+<div id="gameText"></div>
+<div id="buttons"></div>
+
+<script>
+  let pandaName = "";
+  let money = 100;
+  let food = 0;
+  let distance = 0;
+  const maxDistance = 200;
+
+  const statsBox = document.getElementById("stats");
+  const textBox = document.getElementById("gameText");
+  const buttonBox = document.getElementById("buttons");
+  const progressBar = document.getElementById("progressBar");
+  const eventImage = document.getElementById("eventImage");
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function updateStats() {
+    statsBox.textContent = `🐼 ${pandaName} | 💰 ${money} Yuan | 🍖 ${food} Food | 🛣️ ${distance}/${maxDistance}`;
+  }
+
+  function updateProgress() {
+    progressBar.style.width = `${(distance / maxDistance) * 100}%`;
+  }
+
+  function setText(text) {
+    textBox.textContent = text;
+  }
+
+  function setButtons(buttons) {
+    buttonBox.innerHTML = "";
+    buttons.forEach(b => {
+      const btn = document.createElement("button");
+      btn.textContent = b.text;
+      btn.onclick = b.action;
+      buttonBox.appendChild(btn);
+    });
+  }
+
+  function setImage(src) {
+    eventImage.src = src;
+  }
+
+  function gameOver(reason) {
+    setText(reason + " You Died. THE END.");
+    setButtons([]);
+    setImage("");
+  }
+
+  async function riverEvent() {
+    setText("You encounter a river. Try to float across?");
+    setImage("river.jpg");
+    setButtons([
+      { text: "Yes", action: () => resolveRiver(true) },
+      { text: "No", action: () => resolveRiver(false) }
+    ]);
+  }
+
+  async function resolveRiver(cross) {
+    setButtons([]);
+    await sleep(1200);
+
+    if (cross) {
+      setText("You attempt to cross...");
+      setImage("river.jpg");
+      await sleep(1500);
+      if (Math.random() < 0.35) {
+        setText("Success! You crossed the river.");
+      } else {
+        food -= 12;
+        if (food < 0) return gameOver("You drowned and ran out of food.");
+        setText("You failed and lost 12 food.");
+      }
+    } else {
+      food -= 12;
+      if (food < 0) return gameOver("You went around but starved.");
+      setText("You go around and lose 12 food.");
+    }
+
+    updateStats();
+    await sleep(2000);
+    continueTravel();
+  }
+
+  async function townEvent() {
+    setText("You find a town! Buy food?");
+    setImage("town.jpg");
+    setButtons([
+      { text: "Buy 25 Food", action: () => buyFood(25) },
+      { text: "Skip Town", action: continueTravel }
+    ]);
+  }
+
+  function buyFood(amount) {
+    if (money >= amount) {
+      money -= amount;
+      food += amount;
+    }
+    updateStats();
+    continueTravel();
+  }
+
+  async function sicknessEvent() {
+    food -= 7;
+    if (food < 0) return gameOver("You got sick and ran out of food.");
+    setText("You got sick and lost 7 food.");
+    setImage("sick.jpg");
+    updateStats();
+    await sleep(1800);
+    continueTravel();
+  }
+
+  async function stormEvent(type) {
+    food -= 12;
+    if (food < 0) return gameOver(`Lost in the ${type} storm.`);
+    setText(`A ${type} storm slows you down!`);
+    setImage(type === "snow" ? "snowstorm.jpg" : "sandstorm.jpg");
+    updateStats();
+    await sleep(1800);
+    continueTravel();
+  }
+
+  async function peacefulEvent() {
+    setText("You travel peacefully through the forest.");
+    setImage("forest.jpg");
+    await sleep(2000);
+    continueTravel();
+  }
+
+  async function bonusEvent() {
+    if (Math.random() < 0.5) {
+      money += 10;
+      setText("You found extra Yuan!");
+      setImage("money.jpg");
+    } else {
+      food += 10;
+      setText("You found extra food!");
+      setImage("food.jpg");
+    }
+    updateStats();
+    await sleep(1800);
+    continueTravel();
+  }
+
+  async function travel() {
+    setButtons([]);
+    setText("Traveling...");
+    setImage("forest.jpg");
+    await sleep(1500);
+
+    distance += 5;
+    updateProgress();
+
+    if (distance >= maxDistance) {
+      setText("You arrived in Beijing! YOU WIN 🎉");
+      setImage("beijing.jpg");
+      setButtons([]);
+      return;
+    }
+
+    randomEvent();
+  }
+
+  function continueTravel() {
+    setButtons([{ text: "Travel", action: travel }]);
+  }
+
+  function randomEvent() {
+    const roll = Math.random();
+    if (roll < 0.15) riverEvent();
+    else if (roll < 0.30) sicknessEvent();
+    else if (roll < 0.45) stormEvent("snow");
+    else if (roll < 0.55) stormEvent("sand");
+    else if (roll < 0.65) townEvent();
+    else if (roll < 0.75) bonusEvent();
+    else peacefulEvent();
+  }
+
+  function startGame() {
+    pandaName = prompt("What is your panda's name?");
+    setText(`Welcome ${pandaName}! You have ${money} Yuan. Buy starting food.`);
+    setButtons([
+      { text: "Buy 30 Food", action: () => buyFood(30) },
+      { text: "Buy 50 Food", action: () => buyFood(50) },
+      { text: "Buy 70 Food", action: () => buyFood(70) }
+    ]);
+    updateStats();
+  }
+
+  startGame();
+</script>
+
+</body>
+</html>
